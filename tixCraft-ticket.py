@@ -105,7 +105,7 @@ def doLogin():
 
 def doCheckLogin(s):
     response = s.get(baseUrl)
-    print 'status_code : ' + str(response.status_code)
+    printConnectDetail(response)
     root = etree.HTML(response.text)
     userData = root.xpath("//a[@id='logout']/text()")
     if len(userData) == 0:
@@ -120,7 +120,7 @@ def doCheckLogin(s):
 # 從立即購票中進入
 def getActivityUrl(s):
     response = s.get(rootUrl)
-    print 'status_code : ' + str(response.status_code)
+    printConnectDetail(response)
     root = etree.HTML(response.text)
     activityUrlList = root.xpath("//ul[@class='btn']/li/a/@href")
     activityNameList = root.xpath("//ul[@class='btn']/li/a/div/span/text()")
@@ -138,7 +138,7 @@ def getActivityUrl(s):
 # 選擇區域
 def getAreaSelectUrl(s, activityUrl):
     response = s.get(baseUrl + activityUrl)
-    print 'status_code : ' + str(response.status_code)
+    printConnectDetail(response)
     root = etree.HTML(response.text)
 
     detailDateList = root.xpath("//table/tbody//tr/td[1]")
@@ -159,11 +159,12 @@ def getAreaSelectUrl(s, activityUrl):
 # 轉換成選擇數量的URL
 def getOrderQuantityUrl(s, areaSelectUrl):
     response = s.get(baseUrl + areaSelectUrl)
-    print 'status_code : ' + str(response.status_code)
+    printConnectDetail(response)
 
     if not str(response.url).startswith(baseUrl + areaSelectUrl):
-        print response.url
-        return s, areaSelectUrl
+        print "no page https://tixcraft.com/ticket/area"
+        reList = re.findall('(?<=https://tixcraft.com).+', response.url)
+        return s, reList[0]
     root = etree.HTML(response.text)
 
     priceList = root.xpath("//div[@class='zone area-list']/div/b/text()")  # 價錢
@@ -217,15 +218,15 @@ def getOrderQuantityUrl(s, areaSelectUrl):
 # 送出選取的數量
 def sendOrderQuantity(s, orderQuantitUrl):
     response = s.get(baseUrl + orderQuantitUrl)
-    print 'status_code : ' + str(response.status_code)
+    printConnectDetail(response)
     postUrl = response.url
     root = etree.HTML(response.text)
 
     csrftokenList = root.xpath("//input[@id='CSRFTOKEN']/@value")
     TicketForm = root.xpath("//select/@name")
 
-    print "CSRFTOKEN :" + csrftokenList[0]
-    print TicketForm[0] + buyNumber
+    print "CSRFTOKEN : " + csrftokenList[0]
+    print TicketForm[0] + " : " + buyNumber
     payload = {
         "CSRFTOKEN": csrftokenList[0],
         TicketForm[0]: buyNumber,
@@ -234,29 +235,26 @@ def sendOrderQuantity(s, orderQuantitUrl):
 
     print "\nstart post"
     response = s.post(postUrl, payload)  # 訂票
-    print 'status_code : ' + str(response.status_code)
-    print 'status.url : ' + str(response.url)
+    printConnectDetail(response)
+    
 
     print "\nstart get order"
     response = s.get(baseUrl + orderUrl)
-    print 'status_code : ' + str(response.status_code)
-    print 'status.url : ' + str(response.url)
+    printConnectDetail(response)
 
     print "\nstart get check"
     response = s.get(baseUrl + checkUrl)
-    print 'status_code : ' + str(response.status_code)
-    print 'status.url : ' + str(response.url)
+    printConnectDetail(response)
 
     print "\nstart get payment"
     response = s.get(baseUrl + paymentURL)
-    print 'status_code : ' + str(response.status_code)
-    print 'status.url : ' + str(response.url)
+    printConnectDetail(response)
 
     if str(response.url).startswith(baseUrl + paymentURL):
         root = etree.HTML(response.text)
         ticketID = root.xpath("//div[@class='fcBlue']/text()")
         detailList = root.xpath("//table[@id='cartList']/tbody/tr/td/text()")
-        print "\nsuccessful!!!\nticketID : " + ticketID[0].encode("utf-8")
+        print "\nsuccessful!!!\n\nticketID : " + ticketID[0].encode("utf-8")
         for detail in detailList:
             print detail
         return csrftokenList[0]
@@ -265,58 +263,72 @@ def sendOrderQuantity(s, orderQuantitUrl):
     sys.exit()
 
 
-# 付款方式 not use
-def sendPayment(s, csrftoken):
-    data = s.get(baseUrl + paymentURL)
-    root = etree.HTML(data)
-    paymentLabel = root.xpath(
-        "//form[@id='PaymentForm']/table/tbody/tr/td/label/text()")
-    paymentValue = root.xpath(
-        "//form[@id='PaymentForm']/table/tbody/tr/td/label/input/@value")
+# # 付款方式 not use
+# def sendPayment(s, csrftoken):
+#     data = s.get(baseUrl + paymentURL)
+#     root = etree.HTML(data)
+#     paymentLabel = root.xpath(
+#         "//form[@id='PaymentForm']/table/tbody/tr/td/label/text()")
+#     paymentValue = root.xpath(
+#         "//form[@id='PaymentForm']/table/tbody/tr/td/label/input/@value")
 
-    print "paymentLabel len :"
-    print len(paymentLabel)
-    if len(paymentLabel) == 0:
-        return 0
-    value = str()
-    for label in paymentLabel:
-        print label
-        if ibon in label:
-            value = paymentValue[paymentLabel.index(label)]
+#     print "paymentLabel len :"
+#     print len(paymentLabel)
+#     if len(paymentLabel) == 0:
+#         return 0
+#     value = str()
+#     for label in paymentLabel:
+#         print label
+#         if ibon in label:
+#             value = paymentValue[paymentLabel.index(label)]
 
-    print "payment_id : " + value
-    payload = {
-        "CSRFTOKEN": csrftoken,
-        "PaymentForm[payment_id]": value,
-        "PaymentForm[shipment_id]": "23"
-    }
-    data = s.post(baseUrl + sendPaymentURL, payload)  # 付款方式
-    return s
+#     print "payment_id : " + value
+#     payload = {
+#         "CSRFTOKEN": csrftoken,
+#         "PaymentForm[payment_id]": value,
+#         "PaymentForm[shipment_id]": "23"
+#     }
+#     data = s.post(baseUrl + sendPaymentURL, payload)  # 付款方式
+#     return s
 
 
-# not use
-def getFinishPage(s):
-    data = s.get(baseUrl + finishURL)
-    print "FinishPage"
+# # not use
+# def getFinishPage(s):
+#     data = s.get(baseUrl + finishURL)
+#     print "FinishPage"
+
+def printConnectDetail(response):
+    print '\nstatus : ' + str(response.status_code)
+    print '   url : ' + str(response.url)
+    if ( len(response.history) > 0 ):
+        print 'history : '
+        for i in response.history:
+            print i
 
 
 def main():
-    print "====== start doLogin  ======"
+
+    tStart = time.time()
+
+    print "============ doLogin  ========================="
     s = doLogin()
     doCheckLogin(s)
 
-    print "\n====== start getActivityUrl ======"
+    print "\n\n============ getActivityUrl =================="
     s, activityUrl = getActivityUrl(s)
 
-    print "\n====== start getAreaSelectUrl ======"
+    print "\n\n============ getAreaSelectUrl ================"
     s, areaSelectUrl = getAreaSelectUrl(s, activityUrl)
 
-    print "\n====== start getOrderQuantityUrl  ======"
+    print "\n\n============ getOrderQuantityUrl  ============"
     s, orderQuantitUrl = getOrderQuantityUrl(
         s, areaSelectUrl)
 
-    print "\n====== start sendOrderQuantity  ======"
+    print "\n\n============ sendOrderQuantity  =============="
     sendOrderQuantity(s, orderQuantitUrl)
+
+    tEnd = time.time()
+    print "It cost " + str(tEnd - tStart) + " sec"
 
 if __name__ == '__main__':
     main()
