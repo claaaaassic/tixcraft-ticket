@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from lxml import etree
 import re
 import json
-import time
+import time, datetime
 import sys
 
 ##########################
@@ -25,11 +25,22 @@ rootUrl = "https://tixcraft.com/activity/detail/17_JRI_TP"
 date = "12/23(五)"
 
 # area name
-price = u"3880"
+price = u"4880"
 
 # ticket quantity
 buyNumber = "1"
 
+
+# 等待開始
+setStartDate = True
+startDate = [2016,11,26,12,00] # YYYY,MM,dd,HH,mm
+
+# 持續尋找購票按鈕
+waitOpen = True  
+
+
+# 持續尋找未售完按鈕
+waitSell = True
 
 baseUrl = "https://tixcraft.com"
 ticketBaseUrl = "/ticket/ticket"
@@ -72,8 +83,7 @@ class SessionGoogle:
         url_auth = "https://accounts.google.com/ServiceLoginAuth"
         self.ses = requests.session()
         login_html = self.ses.get(url_login)
-        soup_login = BeautifulSoup(login_html.content, 'lxml').find(
-            'form').find_all('input')
+        soup_login = BeautifulSoup(login_html.content, 'lxml').find('form').find_all('input')
         my_dict = {}
         for u in soup_login:
             if u.has_attr('value'):
@@ -113,12 +123,26 @@ def doCheckLogin(s):
         print 'len(userData) : ' + str(len(userData))
         sys.exit()
     else:
-        print 'userData : ' + userData[0]
-        
+        print '  user : ' + userData[0]
+
 
 # 找到指定場次前往選擇區域的URL
 # 從立即購票中進入
 def getActivityUrl(s):
+
+    while waitOpen:
+        for i in range(40):
+            response = s.get(rootUrl)
+            root = etree.HTML(response.text)
+            activityUrlList = root.xpath("//ul[@class='btn']/li/a/@href")
+            activityNameList = root.xpath("//ul[@class='btn']/li/a/div/span/text()")
+            for index in range(len(activityUrlList)):
+                if activityUrlList[index].startswith("/activity/game"):
+                    printConnectDetail(response)
+                    print activityNameList[index] + " : " + activityUrlList[index]
+                    return s, activityUrlList[index]
+        printConnectDetail(response)
+
     response = s.get(rootUrl)
     printConnectDetail(response)
     root = etree.HTML(response.text)
@@ -137,6 +161,27 @@ def getActivityUrl(s):
 # 找到指定票價區間前往選擇張數的URL
 # 選擇區域
 def getAreaSelectUrl(s, activityUrl):
+
+    while waitSell:
+        for i in range(40):
+            response = s.get(baseUrl + activityUrl)
+            root = etree.HTML(response.text)
+            detailDateList = root.xpath("//table/tbody//tr/td[1]")
+            detailUrlList = root.xpath("//table/tbody//tr/td[4]/input/@data-href")
+
+            if len(detailUrlList) == 0 :
+                continue
+
+            for index in range(len(detailDateList)):
+                print detailDateList[index].text
+                if detailDateList[index].text.encode("utf-8").startswith(date) :
+                    printConnectDetail(response)
+                    areaSelectUrl = detailUrlList[index]
+                    print "\nareaSelectUrl : " + areaSelectUrl
+                    return s, areaSelectUrl   
+        printConnectDetail(response)
+        print "not found 立即訂購"
+
     response = s.get(baseUrl + activityUrl)
     printConnectDetail(response)
     root = etree.HTML(response.text)
@@ -145,13 +190,13 @@ def getAreaSelectUrl(s, activityUrl):
     detailUrlList = root.xpath("//table/tbody//tr/td[4]/input/@data-href")
 
     for index in range(len(detailDateList)):
-        print detailDateList[index].text + " : " + detailUrlList[index]
+        print detailDateList[index].text
         if detailDateList[index].text.encode("utf-8").startswith(date):
             areaSelectUrl = detailUrlList[index]
             print "\nareaSelectUrl : " + areaSelectUrl
             return s, areaSelectUrl
 
-    print 'not found activityUrl 購票按鈕'
+    print 'not found areaSelectUrl 立即訂購'
     sys.exit()
 
 
@@ -189,7 +234,7 @@ def getOrderQuantityUrl(s, areaSelectUrl):
                 "//div[@class='zone area-list']/ul[@id='" + str(zoneID) + "']/li/a/@id")
             area = areaList[0]
             areaID = areaIDList[0]
-            print "price : " + price + ", area : " + area + ", areaID : " + areaID
+            print " price : " + price + ", area : " + area + ", areaID : " + areaID
             break
 
     for content in areaUrlList:
@@ -236,7 +281,6 @@ def sendOrderQuantity(s, orderQuantitUrl):
     print "\nstart post"
     response = s.post(postUrl, payload)  # 訂票
     printConnectDetail(response)
-    
 
     print "\nstart get order"
     response = s.get(baseUrl + orderUrl)
@@ -298,15 +342,31 @@ def sendOrderQuantity(s, orderQuantitUrl):
 #     print "FinishPage"
 
 def printConnectDetail(response):
-    print '\nstatus : ' + str(response.status_code)
+    print '\n'
+    print time.ctime()
+    print 'status : ' + str(response.status_code)
     print '   url : ' + str(response.url)
-    if ( len(response.history) > 0 ):
+    if (len(response.history) > 0):
         print 'history : '
         for i in response.history:
             print i
 
 
+def waitStartDate():
+    print "  now : " + time.ctime()
+    print "start : " + datetime.datetime(startDate[0],startDate[1],startDate[2],startDate[3],startDate[4]).ctime()
+    now = time.localtime()
+    difference = datetime.datetime(startDate[0],startDate[1],startDate[2],startDate[3],startDate[4]) - datetime.datetime(now[0],now[1], now[2],now[3],now[4])
+    print "difference.seconds : " + str(difference.seconds)
+    if difference.seconds > 90:
+        print "start sleep"
+        time.sleep(difference.seconds - 90)
+    print time.ctime()
+
 def main():
+
+    if setStartDate:
+        waitStartDate()
 
     tStart = time.time()
 
