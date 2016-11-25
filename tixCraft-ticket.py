@@ -1,11 +1,13 @@
 #-*- coding: utf-8 -*-
+import sys
+import time
+import datetime
+import json
+import re
+
 import requests
 from bs4 import BeautifulSoup
 from lxml import etree
-import re
-import json
-import time, datetime
-import sys
 
 ##########################
 #
@@ -13,42 +15,36 @@ import sys
 #
 #################################
 
-# login mode and email and password
-mode = "facebook"  # facebook / google
-email = "facebook@gmail.com"
-password = "password"
+# login MODE and EMAIL and PASSWORD
+MODE = "facebook"  # facebook / google
+EMAIL = "email"
+PASSWORD = "password"
 
 # activity detail url
-rootUrl = "https://tixcraft.com/activity/detail/17_JRI_TP"
-
-# activity date
-date = "12/23(五)"
-
-# area name
-price = u"4880"
+TICKET_URL = "https://tixcraft.com/activity/detail/17_JRI_TP"
+TICKET_DATE = "12/23(五)"
+TICKET_PRICE = u"4880"
 
 # ticket quantity
-buyNumber = "1"
+BUY_NUMBER = "1"
 
 
 # 等待開始
-setStartDate = True
-startDate = [2016,11,26,12,00] # YYYY,MM,dd,HH,mm
+WAIT_START = True
+START_DATE = [2016, 11, 25, 12, 33]  # YYYY,MM,dd,HH,mm
 
 # 持續尋找購票按鈕
-waitOpen = True  
-
+WAIT_OPEN = True
 
 # 持續尋找未售完按鈕
-waitSell = True
+WAIT_SELL = True
 
-baseUrl = "https://tixcraft.com"
-ticketBaseUrl = "/ticket/ticket"
-paymentURL = "/ticket/payment"
-orderUrl = "/ticket/order"
-checkUrl = "/ticket/check"
-sendPaymentURL = "/ticket/sendPayment"
-finishURL = "/ticket/finish"
+BASE_URL = "https://tixcraft.com"
+PAYMENT_URL = BASE_URL + "/ticket/payment"
+ORDER_URL = BASE_URL + "/ticket/order"
+CHECK_URL = BASE_URL + "/ticket/check"
+SENDPAYMENT_URL = BASE_URL + "/ticket/sendPayment"
+FINISH_URL = BASE_URL + "/ticket/finish"
 
 
 class SessionFacebook:
@@ -83,7 +79,8 @@ class SessionGoogle:
         url_auth = "https://accounts.google.com/ServiceLoginAuth"
         self.ses = requests.session()
         login_html = self.ses.get(url_login)
-        soup_login = BeautifulSoup(login_html.content, 'lxml').find('form').find_all('input')
+        soup_login = BeautifulSoup(login_html.content, 'lxml').find(
+            'form').find_all('input')
         my_dict = {}
         for u in soup_login:
             if u.has_attr('value'):
@@ -100,144 +97,140 @@ class SessionGoogle:
         return self.ses.post(URL, data=payload)
 
 
-def doLogin():
-    if mode == 'facebook':
-        s = SessionFacebook(email, password)
+def do_login():
+    print "============ do_login  ========================="
+    if MODE == 'facebook':
+        s = SessionFacebook(EMAIL, PASSWORD)
         s.get("https://tixcraft.com/login/facebook")
-    elif mode == 'google':
-        s = SessionGoogle(email, password)
+    elif MODE == 'google':
+        s = SessionGoogle(EMAIL, PASSWORD)
         s.get("https://tixcraft.com/login/google")
     else:
-        print 'mode must be facebook or google'
+        print 'MODE must be facebook or google'
         sys.exit()
     return s
 
 
-def doCheckLogin(s):
-    response = s.get(baseUrl)
-    printConnectDetail(response)
+def check_login(s):
+    response = s.get(BASE_URL)
+    print_response_detail(response)
     root = etree.HTML(response.text)
-    userData = root.xpath("//a[@id='logout']/text()")
-    if len(userData) == 0:
+    user_data = root.xpath("//a[@id='logout']/text()")
+    if len(user_data) == 0:
         print 'login fail'
-        print 'len(userData) : ' + str(len(userData))
+        print 'len(user_data) : ' + str(len(user_data))
         sys.exit()
     else:
-        print '  user : ' + userData[0]
+        print '  user : ' + user_data[0]
 
 
-# 找到指定場次前往選擇區域的URL
-# 從立即購票中進入
-def getActivityUrl(s):
-
-    while waitOpen:
+# 找到指定場次的URL
+def get_activity_url(s):
+    print "\n\n============ get_activity_url =================="
+    while WAIT_OPEN:
         for i in range(40):
-            response = s.get(rootUrl)
+            response = s.get(TICKET_URL)
             root = etree.HTML(response.text)
-            activityUrlList = root.xpath("//ul[@class='btn']/li/a/@href")
-            activityNameList = root.xpath("//ul[@class='btn']/li/a/div/span/text()")
-            for index in range(len(activityUrlList)):
-                if activityUrlList[index].startswith("/activity/game"):
-                    printConnectDetail(response)
-                    print activityNameList[index] + " : " + activityUrlList[index]
-                    return s, activityUrlList[index]
-        printConnectDetail(response)
+            activity_url_list = root.xpath("//ul[@class='btn']/li/a/@href")
+            activity_name_list = root.xpath(
+                "//ul[@class='btn']/li/a/div/span/text()")
+            for index in range(len(activity_url_list)):
+                if activity_url_list[index].startswith("/activity/game"):
+                    print_response_detail(response)
+                    print activity_name_list[index] + " : " + activity_url_list[index]
+                    return s, activity_url_list[index]
+        print_response_detail(response)
 
-    response = s.get(rootUrl)
-    printConnectDetail(response)
+    response = s.get(TICKET_URL)
+    print_response_detail(response)
     root = etree.HTML(response.text)
-    activityUrlList = root.xpath("//ul[@class='btn']/li/a/@href")
-    activityNameList = root.xpath("//ul[@class='btn']/li/a/div/span/text()")
+    activity_url_list = root.xpath("//ul[@class='btn']/li/a/@href")
+    activity_name_list = root.xpath("//ul[@class='btn']/li/a/div/span/text()")
 
-    for index in range(len(activityUrlList)):
-        print activityNameList[index] + " : " + activityUrlList[index]
-        if activityUrlList[index].startswith("/activity/game"):
-            return s, activityUrlList[index]
+    for index in range(len(activity_url_list)):
+        print activity_name_list[index] + " : " + activity_url_list[index]
+        if activity_url_list[index].startswith("/activity/game"):
+            return s, activity_url_list[index]
 
     print 'not found activityUrl 購票按鈕'
     sys.exit()
 
 
-# 找到指定票價區間前往選擇張數的URL
-# 選擇區域
-def getAreaSelectUrl(s, activityUrl):
-
-    while waitSell:
+# 找到指定票價區間的URL
+def get_section_url(s, activityUrl):
+    print "\n\n============ get_section_url ================"
+    while WAIT_SELL:
         for i in range(40):
-            response = s.get(baseUrl + activityUrl)
+            response = s.get(BASE_URL + activityUrl)
             root = etree.HTML(response.text)
-            detailDateList = root.xpath("//table/tbody//tr/td[1]")
-            detailUrlList = root.xpath("//table/tbody//tr/td[4]/input/@data-href")
+            detail_date_list = root.xpath("//table/tbody//tr/td[1]")
+            detail_url_list = root.xpath("//table/tbody//tr/td[4]/input/@data-href")
 
-            if len(detailUrlList) == 0 :
+            if len(detail_url_list) == 0:
                 continue
 
-            for index in range(len(detailDateList)):
-                print detailDateList[index].text
-                if detailDateList[index].text.encode("utf-8").startswith(date) :
-                    printConnectDetail(response)
-                    areaSelectUrl = detailUrlList[index]
-                    print "\nareaSelectUrl : " + areaSelectUrl
-                    return s, areaSelectUrl   
-        printConnectDetail(response)
+            for index in range(len(detail_date_list)):
+                print detail_date_list[index].text
+                if detail_date_list[index].text.encode("utf-8").startswith(TICKET_DATE):
+                    print_response_detail(response)
+                    section_url = detail_url_list[index]
+                    print detail_date_list[index].text + " : " + section_url
+                    return s, section_url
+        print_response_detail(response)
         print "not found 立即訂購"
 
-    response = s.get(baseUrl + activityUrl)
-    printConnectDetail(response)
+    response = s.get(BASE_URL + activityUrl)
+    print_response_detail(response)
     root = etree.HTML(response.text)
 
-    detailDateList = root.xpath("//table/tbody//tr/td[1]")
-    detailUrlList = root.xpath("//table/tbody//tr/td[4]/input/@data-href")
+    detail_date_list = root.xpath("//table/tbody//tr/td[1]")
+    detail_url_list = root.xpath("//table/tbody//tr/td[4]/input/@data-href")
 
-    for index in range(len(detailDateList)):
-        print detailDateList[index].text
-        if detailDateList[index].text.encode("utf-8").startswith(date):
-            areaSelectUrl = detailUrlList[index]
-            print "\nareaSelectUrl : " + areaSelectUrl
-            return s, areaSelectUrl
+    for index in range(len(detail_date_list)):
+        print detail_date_list[index].text
+        if detail_date_list[index].text.encode("utf-8").startswith(TICKET_DATE):
+            section_url = detail_url_list[index]
+            print "section_url : " + section_url
+            return s, section_url
 
-    print 'not found areaSelectUrl 立即訂購'
+    print 'not found section_url 立即訂購'
     sys.exit()
 
 
 # 在網頁中取得規則並且轉換成真正選擇張數的URL
 # 轉換成選擇數量的URL
-def getOrderQuantityUrl(s, areaSelectUrl):
-    response = s.get(baseUrl + areaSelectUrl)
-    printConnectDetail(response)
+def get_orderquantity_url(s, section_url):
+    print "\n\n============ get_orderquantity_url  ============"    
+    response = s.get(BASE_URL + section_url)
+    print_response_detail(response)
 
-    if not str(response.url).startswith(baseUrl + areaSelectUrl):
+    # 如果跳過選擇區域的頁面
+    if not str(response.url).startswith(BASE_URL + section_url):
         print "no page https://tixcraft.com/ticket/area"
         reList = re.findall('(?<=https://tixcraft.com).+', response.url)
         return s, reList[0]
     root = etree.HTML(response.text)
 
-    priceList = root.xpath("//div[@class='zone area-list']/div/b/text()")  # 價錢
-    priceIDList = root.xpath(
-        "//div[@class='zone area-list']/div/@data-id")  # 價錢 id
-
-    areaPriceList = root.xpath(
-        "//div[@class='zone area-list']/ul/li/a/text()")  # 區域
-
-    areaUrlList = root.xpath("/html/body/script")
+    price_list = root.xpath("//div[@class='zone area-list']/div/b/text()")  # 價錢
+    price_ID_list = root.xpath("//div[@class='zone area-list']/div/@data-id")  # 價錢 id
+    section_url_list = root.xpath("/html/body/script")
 
     areaID = str()
-    for index in range(len(priceList)):
-        if priceList[index] == None:
-            print price[index]
+    for index in range(len(price_list)):
+        if price_list[index] == None:
             continue
-        if price in priceList[index]:
-            zoneID = priceIDList[index]
+        if TICKET_PRICE in price_list[index]:
+            zoneID = price_ID_list[index]
             areaList = root.xpath(
                 "//div[@class='zone area-list']/ul[@id='" + str(zoneID) + "']/li/a/text()")  # 區域
             areaIDList = root.xpath(
                 "//div[@class='zone area-list']/ul[@id='" + str(zoneID) + "']/li/a/@id")
             area = areaList[0]
             areaID = areaIDList[0]
-            print " price : " + price + ", area : " + area + ", areaID : " + areaID
+            print " TICKET_PRICE : " + TICKET_PRICE + ", area : " + area + ", areaID : " + areaID
             break
 
-    for content in areaUrlList:
+    for content in section_url_list:
         if content.text != None:
             scriptContent = content.text.encode("utf-8")
 
@@ -253,55 +246,57 @@ def getOrderQuantityUrl(s, areaSelectUrl):
 
                 matchAreaIDRoleJosnFile = json.loads(matchAreaIDRole)
 
-                print "OrderQuantitUrl : " + matchAreaIDRoleJosnFile[areaID]
+                print "orderquantity_url : " + matchAreaIDRoleJosnFile[areaID]
                 return s, matchAreaIDRoleJosnFile[areaID]
 
-    print 'not found OrderQuantitUrl 訂票區域按鈕'
+    print 'not found orderquantity_url 訂票區域按鈕'
     sys.exit()
 
 
 # 送出選取的數量
-def sendOrderQuantity(s, orderQuantitUrl):
-    response = s.get(baseUrl + orderQuantitUrl)
-    printConnectDetail(response)
-    postUrl = response.url
+def send_orderquantity(s, orderquantity_url):
+    print "\n\n============ send_orderquantity  =============="
+    response = s.get(BASE_URL + orderquantity_url)
+    print_response_detail(response)
+    post_url = response.url
     root = etree.HTML(response.text)
 
-    csrftokenList = root.xpath("//input[@id='CSRFTOKEN']/@value")
-    TicketForm = root.xpath("//select/@name")
+    csrftoken_list = root.xpath("//input[@id='CSRFTOKEN']/@value")
+    ticketform_list = root.xpath("//select/@name")
 
-    print "CSRFTOKEN : " + csrftokenList[0]
-    print TicketForm[0] + " : " + buyNumber
+    print "CSRFTOKEN : " + csrftoken_list[0]
+    print ticketform_list[0] + " : " + BUY_NUMBER
+
     payload = {
-        "CSRFTOKEN": csrftokenList[0],
-        TicketForm[0]: buyNumber,
+        "CSRFTOKEN": csrftoken_list[0],
+        ticketform_list[0]: BUY_NUMBER,
         "ticketPriceSubmit": "確認張數"
     }
 
     print "\nstart post"
-    response = s.post(postUrl, payload)  # 訂票
-    printConnectDetail(response)
+    response = s.post(post_url, payload)  # 訂票
+    print_response_detail(response)
 
     print "\nstart get order"
-    response = s.get(baseUrl + orderUrl)
-    printConnectDetail(response)
+    response = s.get(ORDER_URL)
+    print_response_detail(response)
 
     print "\nstart get check"
-    response = s.get(baseUrl + checkUrl)
-    printConnectDetail(response)
+    response = s.get(CHECK_URL)
+    print_response_detail(response)
 
     print "\nstart get payment"
-    response = s.get(baseUrl + paymentURL)
-    printConnectDetail(response)
+    response = s.get(PAYMENT_URL)
+    print_response_detail(response)
 
-    if str(response.url).startswith(baseUrl + paymentURL):
+    if str(response.url).startswith(PAYMENT_URL):
         root = etree.HTML(response.text)
-        ticketID = root.xpath("//div[@class='fcBlue']/text()")
-        detailList = root.xpath("//table[@id='cartList']/tbody/tr/td/text()")
-        print "\nsuccessful!!!\n\nticketID : " + ticketID[0].encode("utf-8")
-        for detail in detailList:
+        ticket_ID_list = root.xpath("//div[@class='fcBlue']/text()")
+        detail_list = root.xpath("//table[@id='cartList']/tbody/tr/td/text()")
+        print "\nsuccessful!!!\n\nticketID : " + ticket_ID_list[0].encode("utf-8")
+        for detail in detail_list:
             print detail
-        return csrftokenList[0]
+        return csrftoken_list[0]
 
     print 'not refer to payment page 訂票區域按鈕'
     sys.exit()
@@ -309,7 +304,7 @@ def sendOrderQuantity(s, orderQuantitUrl):
 
 # # 付款方式 not use
 # def sendPayment(s, csrftoken):
-#     data = s.get(baseUrl + paymentURL)
+#     data = s.get(PAYMENT_URL)
 #     root = etree.HTML(data)
 #     paymentLabel = root.xpath(
 #         "//form[@id='PaymentForm']/table/tbody/tr/td/label/text()")
@@ -332,17 +327,16 @@ def sendOrderQuantity(s, orderQuantitUrl):
 #         "PaymentForm[payment_id]": value,
 #         "PaymentForm[shipment_id]": "23"
 #     }
-#     data = s.post(baseUrl + sendPaymentURL, payload)  # 付款方式
+#     data = s.post(SENDPAYMENT_URL, payload)  # 付款方式
 #     return s
 
 
 # # not use
 # def getFinishPage(s):
-#     data = s.get(baseUrl + finishURL)
+#     data = s.get(FINISH_URL)
 #     print "FinishPage"
 
-def printConnectDetail(response):
-    print '\n'
+def print_response_detail(response):
     print time.ctime()
     print 'status : ' + str(response.status_code)
     print '   url : ' + str(response.url)
@@ -352,40 +346,35 @@ def printConnectDetail(response):
             print i
 
 
-def waitStartDate():
+def wait_start():
     print "  now : " + time.ctime()
-    print "start : " + datetime.datetime(startDate[0],startDate[1],startDate[2],startDate[3],startDate[4]).ctime()
+    print "start : " + datetime.datetime(START_DATE[0], START_DATE[1], START_DATE[2], START_DATE[3], START_DATE[4]).ctime()
     now = time.localtime()
-    difference = datetime.datetime(startDate[0],startDate[1],startDate[2],startDate[3],startDate[4]) - datetime.datetime(now[0],now[1], now[2],now[3],now[4])
+    difference = datetime.datetime(START_DATE[0], START_DATE[1], START_DATE[2], START_DATE[3], START_DATE[4]) - datetime.datetime(now[0], now[1], now[2], now[3], now[4])
     print "difference.seconds : " + str(difference.seconds)
-    if difference.seconds > 90:
-        print "start sleep"
+    if difference.seconds > 90 :
+        print "start sleep for " + str(difference.seconds - 90) + " seconds"
         time.sleep(difference.seconds - 90)
     print time.ctime()
 
+
 def main():
 
-    if setStartDate:
-        waitStartDate()
+    if WAIT_START:
+        wait_start()
 
     tStart = time.time()
 
-    print "============ doLogin  ========================="
-    s = doLogin()
-    doCheckLogin(s)
+    s = do_login()
+    check_login(s)
 
-    print "\n\n============ getActivityUrl =================="
-    s, activityUrl = getActivityUrl(s)
+    s, activityUrl = get_activity_url(s)
 
-    print "\n\n============ getAreaSelectUrl ================"
-    s, areaSelectUrl = getAreaSelectUrl(s, activityUrl)
+    s, section_url = get_section_url(s, activityUrl)
+  
+    s, orderquantity_url = get_orderquantity_url(s, section_url)
 
-    print "\n\n============ getOrderQuantityUrl  ============"
-    s, orderQuantitUrl = getOrderQuantityUrl(
-        s, areaSelectUrl)
-
-    print "\n\n============ sendOrderQuantity  =============="
-    sendOrderQuantity(s, orderQuantitUrl)
+    send_orderquantity(s, orderquantity_url)
 
     tEnd = time.time()
     print "It cost " + str(tEnd - tStart) + " sec"
